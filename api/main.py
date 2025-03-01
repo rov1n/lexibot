@@ -174,7 +174,7 @@ async def webhook(request: Request):
     application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
 
     # Process the update
-    application.dispatcher.process_update(update)
+    application.process_update(update)
     return {"message": "ok"}
 
 @app.get("/")
