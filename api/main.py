@@ -161,6 +161,22 @@ async def fetch_user_ids_command(update: Update, context):
     await update.message.reply_text(f"Stored User Details:\n{user_details_str}")
     logging.info(f"Fetched user details: {user_details_str}")
 
+@app.post("/webhook")
+async def webhook(request: Request):
+    webhook_data = await request.json()
+    bot = Bot(token=myBotToken)
+    update = Update.de_json(webhook_data, bot)
+    application = Application.builder().token(myBotToken).build()
+
+    # Add handlers here
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
+    application.add_handler(CommandHandler("everyone", mention_all))
+    application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
+
+    # Process the update
+    application.dispatcher.process_update(update)
+    return {"message": "ok"}
+
 @app.get("/")
 def index():
     return {"message": "Hello World"}
