@@ -197,7 +197,6 @@
 
 # if __name__ == "__main__":
 #     main()
-
 import os
 from typing import Optional
 
@@ -205,9 +204,10 @@ from fastapi import FastAPI, Request
 from pydantic import BaseModel
 
 from telegram import Update, Bot
-from telegram.ext import Dispatcher, MessageHandler, Filters, CommandHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-TOKEN = os.environ.get("LEXI_TOKEN")
+# Retrieve the token from environment variables
+TOKEN = os.getenv("LEXI_TOKEN")
 
 app = FastAPI()
 
@@ -231,32 +231,41 @@ class TelegramWebhook(BaseModel):
 def start(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!")
 
-def register_handlers(dispatcher):
+def register_handlers(application):
     start_handler = CommandHandler('start', start)
-    dispatcher.add_handler(start_handler)
+    application.add_handler(start_handler)
 
 @app.post("/webhook")
-def webhook(webhook_data: TelegramWebhook):
+async def webhook(request: Request):
     '''
     Telegram Webhook
     '''
-    # Method 1
     bot = Bot(token=TOKEN)
-    update = Update.de_json(webhook_data.__dict__, bot) # convert the Telegram Webhook class to dictionary using __dict__ dunder method
-    dispatcher = Dispatcher(bot, None, workers=4)
-    register_handlers(dispatcher)
+    webhook_data = await request.json()
+    update = Update.de_json(webhook_data, bot)  # Convert the Telegram Webhook class to dictionary using __dict__ dunder method
 
-    # handle webhook request
-    dispatcher.process_update(update)
+    application = Application.builder().token(TOKEN).build()
+    register_handlers(application)
 
-    # Method 2
-    # you can just handle the webhook request here without using python-telegram-bot
-    # if webhook_data.message:
-    #     if webhook_data.message.text == '/start':
-    #         send_message(webhook_data.message.chat.id, 'Hello World')
+    # Handle webhook request
+    await application.update_queue.put(update)
+    await application.initialize()  # Initialize the application to process updates
 
     return {"message": "ok"}
 
 @app.get("/")
 def index():
     return {"message": "Hello World"}
+
+# Main function to run the bot in polling mode (optional)
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        level=logging.INFO)
+
+    application = Application.builder().token(TOKEN).build()
+    register_handlers(application)
+
+    print("Bot is running...")
+    application.run_polling()
