@@ -15,8 +15,14 @@ myBotToken = os.getenv("LEXI_TOKEN")
 db_name = os.getenv("DB_NAME")
 db_path = os.path.join(os.path.dirname(__file__), db_name)
 
+# Set up logging configuration
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
 # Cooldown duration for /everyone command (2 minutes)
-cooldown_duration = datetime.timedelta(seconds=5)
+cooldown_duration = datetime.timedelta(minutes=2)
 last_use_time = None
 
 app = FastAPI()
@@ -164,32 +170,26 @@ async def fetch_user_ids_command(update: Update, context):
 @app.post("/webhook")
 async def webhook(request: Request):
     webhook_data = await request.json()
-    bot = Bot(token=myBotToken)
     update = Update.de_json(webhook_data, bot)
-    application = Application.builder().token(myBotToken).build()
-
-    # Add handlers here
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
-    application.add_handler(CommandHandler("everyone", mention_all))
-    application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
-
-    # Process the update
-    application.process_update(update)
+    await application.update_queue.put(update)
     return {"message": "ok"}
 
 @app.get("/")
 def index():
     return {"message": "Hello World"}
 
+# Initialize the bot and application outside the request context to reuse them
+bot = Bot(token=myBotToken)
+application = Application.builder().token(myBotToken).build()
+
+# Add handlers to application once
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
+application.add_handler(CommandHandler("everyone", mention_all))
+application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
+
 def main():
     init_db()
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-    application = Application.builder().token(myBotToken).build()
-    
-    # Add handlers to application in the main function
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
-    application.add_handler(CommandHandler("everyone", mention_all))
-    application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
 
     print("Bot is running...")
     application.run_polling()
