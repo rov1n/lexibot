@@ -11,7 +11,7 @@ from typing import Optional
 load_dotenv()
 
 # Retrieve the token and other variables from environment
-myBotToken = os.getenv("TEST_BOT_TOKEN")
+myBotToken = os.getenv("LEXI_TOKEN")
 db_name = os.getenv("DB_NAME")
 db_path = os.path.join(os.path.dirname(__file__), db_name)
 
