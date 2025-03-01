@@ -36,48 +36,64 @@ class TelegramWebhook(BaseModel):
     poll_answer: Optional[dict]
 
 def init_db():
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            first_name TEXT,
-            last_name TEXT,
-            username TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                first_name TEXT,
+                last_name TEXT,
+                username TEXT
+            )
+        ''')
+        conn.commit()
+    except sqlite3.Error as e:
+        logging.error(f"Database initialization error: {e}")
+    finally:
+        conn.close()
 
 def add_or_update_user_details(user_id, first_name, last_name, username):
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO users (user_id, first_name, last_name, username)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            first_name=excluded.first_name,
-            last_name=excluded.last_name,
-            username=excluded.username
-    ''', (user_id, first_name, last_name, username))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO users (user_id, first_name, last_name, username)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                first_name=excluded.first_name,
+                last_name=excluded.last_name,
+                username=excluded.username
+        ''', (user_id, first_name, last_name, username))
+        conn.commit()
+    except sqlite3.Error as e:
+        logging.error(f"Database insertion error: {e}")
+    finally:
+        conn.close()
 
 def get_user_ids():
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('SELECT user_id FROM users')
-    user_ids = [row[0] for row in c.fetchall()]
-    conn.close()
-    return user_ids
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('SELECT user_id FROM users')
+        user_ids = [row[0] for row in c.fetchall()]
+        conn.close()
+        return user_ids
+    except sqlite3.Error as e:
+        logging.error(f"Database fetch error: {e}")
+        return []
 
 def get_user_details(user_id):
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('SELECT first_name, last_name, username FROM users WHERE user_id = ?', (user_id,))
-    row = c.fetchone()
-    conn.close()
-    return row
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('SELECT first_name, last_name, username FROM users WHERE user_id = ?', (user_id,))
+        row = c.fetchone()
+        conn.close()
+        return row
+    except sqlite3.Error as e:
+        logging.error(f"Database fetch error: {e}")
+        return None
 
 async def get_user_name(bot: Bot, chat_id: int, user_id: int):
     user_details = get_user_details(user_id)
@@ -86,27 +102,23 @@ async def get_user_name(bot: Bot, chat_id: int, user_id: int):
         return first_name, last_name, username
     return None, None, None
 
-async def get_user_details_from_api(bot, user_id):
-    user = await bot.get_chat(user_id)
-    return {
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'username': user.username
-    }
-
 async def handle_instagram_reels(update: Update, context):
+    logging.info("Received Instagram reel link.")
     message_text = update.message.text
     user_id = update.message.from_user.id
     first_name = update.message.from_user.first_name
     last_name = update.message.from_user.last_name or ""
     username = update.message.from_user.username or ""
+    logging.info(f"User details: {user_id}, {first_name}, {last_name}, {username}")
     add_or_update_user_details(user_id, first_name, last_name, username)
     if "instagram.com/" in message_text:
         expanded_url = message_text.replace("instagram.com", "ddinstagram.com")
         await update.message.reply_text(f"Expanded Instagram Reels link: \n{expanded_url}")
+        logging.info(f"Replied with expanded URL: {expanded_url}")
     elif "x.com/" in message_text:
         expanded_url = message_text.replace("x.com", "fxtwitter.com")
         await update.message.reply_text(f"Expanded Twitter link: \n{expanded_url}")
+        logging.info(f"Replied with expanded URL: {expanded_url}")
 
 async def mention_all(update: Update, context):
     global last_use_time
@@ -116,6 +128,7 @@ async def mention_all(update: Update, context):
         last_use_time = current_time
         chat_id = update.message.chat_id
         bot = context.bot
+        logging.info("Executing /everyone command.")
         try:
             mention_message = "Attention everyone!\n\n"
             user_ids = get_user_ids()
@@ -127,6 +140,7 @@ async def mention_all(update: Update, context):
                     full_name = f"{first_name}".strip()
                     mention_message += f"[{full_name}](tg://user?id={user_id})\n"
             await update.message.reply_text(mention_message, parse_mode="Markdown")
+            logging.info("Mentioned all users.")
         except Exception as e:
             logging.error(f"Error fetching group members: {e}")
             await update.message.reply_text("Sorry, I couldn't fetch the list of users.")
@@ -135,13 +149,18 @@ async def mention_all(update: Update, context):
         await update.message.reply_text(f"Please wait {remaining_time.seconds} seconds before using /everyone again.")
 
 async def fetch_user_ids_command(update: Update, context):
+    logging.info("Executing /fetch command.")
     user_ids = get_user_ids()
     user_details_list = []
     for user_id in user_ids:
-        first_name, last_name, username = get_user_details(user_id)
-        user_details_list.append(f"{user_id} - {first_name} {last_name} (@{username})")
+        user_details = get_user_details(user_id)
+        if user_details:
+            first_name, last_name, username = user_details
+            user_details_list.append(f"{user_id} - {first_name} {last_name} (@{username})")
     user_details_str = "\n".join(user_details_list)
     await update.message.reply_text(f"Stored User Details:\n{user_details_str}")
+    logging.info(f"Fetched user details: {user_details_str}")
+
 @app.get("/")
 def index():
     return {"message": "Hello World"}
