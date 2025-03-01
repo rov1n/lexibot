@@ -1,12 +1,10 @@
 import logging
 import datetime
 from telegram import Update, Bot, Contact
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, Dispatcher
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-# import config  # Import config file
 import os, sqlite3, html
-import os
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -144,27 +142,22 @@ async def fetch_user_ids_command(update: Update, context):
         user_details_list.append(f"{user_id} - {first_name} {last_name} (@{username})")
     user_details_str = "\n".join(user_details_list)
     await update.message.reply_text(f"Stored User Details:\n{user_details_str}")
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    webhook_data = await request.json()
-    bot = Bot(token=myBotToken)
-    update = Update.de_json(webhook_data, bot)
-    dispatcher = Dispatcher(bot, None, workers=4)
-
-    dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
-    dispatcher.add_handler(CommandHandler("everyone", mention_all))
-    dispatcher.add_handler(CommandHandler("fetch", fetch_user_ids_command))
-
-    dispatcher.process_update(update)
-    return {"message": "ok"}
-
 @app.get("/")
 def index():
     return {"message": "Hello World"}
 
-if __name__ == "__main__":
+def main():
     init_db()
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     application = Application.builder().token(myBotToken).build()
+    
+    # Add handlers to application in the main function
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instagram_reels))
+    application.add_handler(CommandHandler("everyone", mention_all))
+    application.add_handler(CommandHandler("fetch", fetch_user_ids_command))
+
+    print("Bot is running...")
     application.run_polling()
+
+if __name__ == "__main__":
+    main()
