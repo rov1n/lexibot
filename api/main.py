@@ -11,12 +11,12 @@ from typing import Optional
 load_dotenv()
 
 # Retrieve the token and other variables from environment
-myBotToken = os.getenv("LEXI_TOKEN")
+myBotToken = os.getenv("TEST_BOT_TOKEN")
 db_name = os.getenv("DB_NAME")
 db_path = os.path.join(os.path.dirname(__file__), db_name)
 
 # Cooldown duration for /everyone command (2 minutes)
-cooldown_duration = datetime.timedelta(minutes=2)
+cooldown_duration = datetime.timedelta(seconds=5)
 last_use_time = None
 
 app = FastAPI()
