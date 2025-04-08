@@ -197,75 +197,73 @@
 
 # if __name__ == "__main__":
 #     main()
+
+
 import os
-from typing import Optional
-
+import logging
+import json
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-
-from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from api.commands import expand_instagram, expand_twitter
+import re
 
 # Retrieve the token from environment variables
 TOKEN = os.getenv("LEXI_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") 
 
 app = FastAPI()
 
-class TelegramWebhook(BaseModel):
-    '''
-    Telegram Webhook Model using Pydantic for request body validation
-    '''
-    update_id: int
-    message: Optional[dict]
-    edited_message: Optional[dict]
-    channel_post: Optional[dict]
-    edited_channel_post: Optional[dict]
-    inline_query: Optional[dict]
-    chosen_inline_result: Optional[dict]
-    callback_query: Optional[dict]
-    shipping_query: Optional[dict]
-    pre_checkout_query: Optional[dict]
-    poll: Optional[dict]
-    poll_answer: Optional[dict]
-
-def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!")
-
-def register_handlers(application):
-    start_handler = CommandHandler('start', start)
-    application.add_handler(start_handler)
+@app.get("/")
+async def hello():
+    return {"message":"Hello World"}
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    '''
-    Telegram Webhook
-    '''
-    bot = Bot(token=TOKEN)
-    webhook_data = await request.json()
-    update = Update.de_json(webhook_data, bot)  # Convert the Telegram Webhook class to dictionary using __dict__ dunder method
+    try:
+        webhook_json = await request.json()  # Read request body as JSON
+        chat_id = webhook_json["message"]["chat"]["id"]
+        text = webhook_json["message"]["text"]
+        
+        logging.info(f"Received message: {text} from chat ID: {chat_id}")
 
-    application = Application.builder().token(TOKEN).build()
-    register_handlers(application)
+        # link expand
+        instagram_link = expand_instagram(chat_id,text)
+        twitter_link = expand_twitter(chat_id,text)
+        # if "instagram.com/" in text:
+        #     expanded_url = text.replace("instagram.com", "ddinstagram.com")
+        #     expanded_url = re.sub(r'\?.*igsh=.*$', '', expanded_url)
+        #     logging.info(f"Here is the Expanded Link: {expanded_url}")
+        #     sendMessage(chat_id,expanded_url)
+        #     return {"expanded_url":expanded_url}
 
-    # Handle webhook request
-    await application.update_queue.put(update)
-    await application.initialize()  # Initialize the application to process updates
+        return {"chat_id":chat_id,"text":text,"links":[instagram_link,twitter_link]}
+    except Exception as e:
+        logging.error(f"Webhook processing error: {e}")
+        return {"error_message": str(e)}
 
-    return {"message": "ok"}
 
-@app.get("/")
-def index():
-    return {"message": "Hello World"}
 
-# Main function to run the bot in polling mode (optional)
-if __name__ == "__main__":
-    import logging
+# bot = Bot(token=TOKEN) 
+# application = Application.builder().token(TOKEN).concurrent_updates(10).build()
 
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO)
+# async def error_handler(update: Update, context):
+    # logging.error(f"Update {update} caused error {context.error}")
 
-    application = Application.builder().token(TOKEN).build()
-    register_handlers(application)
+# application.add_error_handler(error_handler)
 
-    print("Bot is running...")
-    application.run_polling()
+# Register handlers
+# async def start(update: Update, context):
+    # logging.info(f"Received /start from {update.effective_chat.id}")
+    # await update.message.reply_text("Hello! This is LexiBot. How can I assist you?")
+
+# async def echo(update: Update, context):
+    # await update.message.reply_text(update.message.text)
+
+# application.add_handler(CommandHandler("start", start))
+# application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+
+# @app.on_event("startup")
+# async def startup_event():
+#     """Set webhook and ensure bot is initialized on startup."""
+#     await application.initialize()
+#     await application.start()
+#     await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
